@@ -33,8 +33,8 @@ def extractText(url):
 
 def findSummary(text, ratio):
 	print('Summary:')
-	print(summarize(text, ratio))
-
+	return summarize(text, ratio)
+	
 if __name__ == "__main__": 
 	url = 'https://www.nytimes.com/2018/06/09/science/fish-decompression-chamber.html?action=click&contentCollection=science&region=rank&module=package&version=highlights&contentPlacement=2&pgtype=sectionfront'
 	result = extractText(url)["text"]

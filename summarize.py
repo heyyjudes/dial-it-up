@@ -6,7 +6,8 @@ stop_words = set(stopwords.words('english'))
 import numpy as np
 import gensim
 import scipy.spatial as sp 
-from scraper import extractText
+from scraper import extractText, findSummary 
+from occamy import Socket
 
 def find_top_sent(model, target_word, url): 
     # REPLACE WITH READ DICT
@@ -46,7 +47,7 @@ def find_top_sent(model, target_word, url):
         sent_score.append(s_score)
 
     ranking = np.argsort(sent_score)
-    top_10_rank = list(ranking[-10:]) 
+    top_10_rank = list(ranking[-4:]) 
     top_10_rank.reverse()
     top_10_sents = [] 
 
@@ -55,16 +56,64 @@ def find_top_sent(model, target_word, url):
         # print(sentences[i]) 
         # print(sent_score[i])
         if i+1 < len(sentences): 
-            output_sentences.append([sentences[i], sentences[i+1], sentences[i+2]])
+            output_sentences.append(sentences[i] + '\t' + sentences[i+1] + '\t' + sentences[i+2])
         else: 
             output_sentences.append([sentences[i]]) 
-    return output_sentences
+    return '\n'.join(output_sentences) 
+
+def call_channel(msg, x):
+    return msg["body"]
+
+class Message: 
+    def __init__(self): 
+        self.init_msg = None 
+        self.query_msg = None 
+
+    def set_init_msg(self, msg_str): 
+        self.init_msg = msg_str
+
+    def set_query_msg(self, msg_str): 
+        self.query_msg = msg_str
 
 if __name__ == "__main__": 
-    url = 'https://www.nytimes.com/2018/06/09/science/fish-decompression-chamber.html?action=click&contentCollection=science&region=rank&module=package&version=highlights&contentPlacement=2&pgtype=sectionfront'
     model = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300.bin', binary=True)
-    for i in range(3): 
-        word = input("Enter a word: ")
-        output_sents = find_top_sent(model, word, url)
-        print(output_sents)
+   
+    socket = Socket("ws://dlevs.me:4000/socket")
+    socket.connect()
+
+    s_msg = Message() 
+
+    channel = socket.channel("room:lobby", {})
+    channel.on("connect", print('Im in'))
+    channel.on("initiate", lambda msg, x: s_msg.set_init_msg(msg["body"]))
+    channel.on("question", lambda msg, x:s_msg.set_query_msg(msg["body"]))
+
+    channel.join()
+
+    print("Enter your message and press return to send the message.")
+    print()
+    url = 'https://www.nytimes.com/2018/06/09/science/fish-decompression-chamber.html?action=click&contentCollection=science&region=rank&module=package&version=highlights&contentPlacement=2&pgtype=sectionfront'
+
+    while s_msg.init_msg == None: 
+        pass 
+    print(s_msg.init_msg)
+
+    result = extractText(url)["text"]
+    abs_sum = findSummary(result, 0.1)
+    
+    channel.push("questionRESULT", {"body": '1 ' + abs_sum}) 
+
+    while True: 
+        while s_msg.query_msg == None: 
+            pass 
+
+        print(s_msg.query_msg)
+        word = s_msg.query_msg.split("_")[-1]
+        try : 
+            output_sents = find_top_sent(model, word, url)
+            channel.push("questionRESULT", {"body": '1 ' + output_sents}) 
+            s_msg.query_msg = None 
+        except: 
+            print("sentence not found")
+
 
